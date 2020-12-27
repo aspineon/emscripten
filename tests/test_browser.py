@@ -3489,14 +3489,15 @@ window.close = function() {
 
   # verify that dynamic linking works in all kinds of in-browser environments.
   # don't mix different kinds in a single test.
-  def test_dylink_dso_needed(self):
-    self._run_dylink_dso_needed(0)
-
-  def test_dylink_dso_needed_inworker(self):
-    self._run_dylink_dso_needed(1)
-
-  def _run_dylink_dso_needed(self, inworker):
+  @parameterized({
+    '': ([0],),
+    'inworker': ([1],),
+  })
+  def test_dylink_dso_needed(self, inworker):
     self.emcc_args += ['-O2']
+    # --proxy-to-worker only on main
+    if inworker:
+      self.emcc_args += ['--proxy-to-worker']
 
     def do_run(src, expected_output):
       # XXX there is no infrastructure (yet ?) to retrieve stdout from browser in tests.
@@ -3514,21 +3515,19 @@ window.close = function() {
             Module.realPrint(x);
           };
         ''')
-      src += r'''
+      create_test_file('test_dylink_dso_needed.c', src + r'''
         #include <emscripten/em_asm.h>
+
         int main() {
-          test_main();
+          int rtn = test_main();
           EM_ASM({
             var expected = %r;
             assert(Module.printed === expected, ['stdout expected:', expected]);
           });
-          REPORT_RESULT(0);
+          return rtn;
         }
-      ''' % (expected_output,)
-      # --proxy-to-worker only on main
-      if inworker:
-        self.emcc_args += ['--proxy-to-worker']
-      self.btest(src, '0', args=self.get_emcc_args() + ['--post-js', 'post.js'])
+      ''' % expected_output)
+      self.btest_exit(self.in_dir('test_dylink_dso_needed.c'), 0, args=self.get_emcc_args() + ['--post-js', 'post.js'])
 
     self._test_dylink_dso_needed(do_run)
 
